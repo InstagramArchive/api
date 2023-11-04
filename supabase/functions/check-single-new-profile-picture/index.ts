@@ -1,74 +1,112 @@
 // Follow this setup guide to integrate the Deno language server with your editor:
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createHash } from "https://deno.land/std@0.110.0/node/crypto.ts";
-import { randomUUID } from "https://deno.land/std@0.110.0/node/crypto.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createHash } from 'https://deno.land/std@0.110.0/node/crypto.ts';
+import { randomUUID } from 'https://deno.land/std@0.110.0/node/crypto.ts';
 
-console.log("Hello from Functions!");
+console.log('Hello from Functions!');
 
 Deno.serve(async (req) => {
   try {
     // Create a Supabase client with the Auth context of the logged in user.
     const supabaseClient = createClient(
       // Supabase API URL - env var exported by default.
-      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get('SUPABASE_URL') ?? '',
       // Supabase API ANON KEY - env var exported by default.
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       // Create client with Auth context of the user that called the function.
       // This way your row-level-security (RLS) policies are applied.
-      {
-        global: {
-          headers: { Authorization: req.headers.get("Authorization")! },
-        },
-      },
+      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
-    //[ { name: "carla.tstr" }, { name: "elisepgn" } ]
-    const userList = await getInstagramProfileName(supabaseClient);
 
-    for (const user of userList) {
-      const userData = await getUserData(user.name);
-      console.log(userData);
-      const pic = await getFile(userData.result.profile.profile_img);
+    const { instagram_profile_id } = await req.json();
 
-      const checksum = getFileChecksum(pic);
-      if (checksum !== user.checksum) {
-        console.log("new data fro", user.name);
-        const fileName = randomUUID() + ".png";
-
-        uploadProfilePicture(supabaseClient, new Uint8Array(pic), fileName);
-
-        const picHD = await getFile(userData.result.profile.profile_full_HD);
-        const fileNameHD = randomUUID() + ".png";
-        uploadProfilePicture(supabaseClient, new Uint8Array(picHD), fileNameHD);
-
-        // Example usage
-        const profilePictureData = {
-          profile_id: user.id,
-          path: fileName,
-          hd_path: fileNameHD,
-          checksum,
-        };
-        console.log(profilePictureData);
-        console.log(
-          await addProfilePicture(supabaseClient, profilePictureData),
-        );
-      } else {
-        console.log("no new data fro", user.name);
-      }
+    if (instagram_profile_id) {
+      // Call a function to process the specific instagram_profile_id
+      await processUser(supabaseClient, instagram_profile_id);
+    } else {
+      // Handle the case where no instagram_profile_id is provided
+      return new Response(JSON.stringify({ error: 'Instagram profile ID is missing' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
-    return new Response(JSON.stringify({ message: "Succes" }), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
+    return new Response(JSON.stringify({ message: 'Success' }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200
     });
+
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+      status: 400
     });
   }
 });
+
+async function processUser(supabaseClient, instagram_profile_id) {
+  // Query the database for the specified instagram_profile_id
+  const userInstaData = await getInstaProfioleData(supabaseClient, instagram_profile_id);
+  const userData = await getUserData(userInstaData.name);
+
+
+  if (userData && userInstaData) {
+    const username = userInstaData.name;
+    console.log(userData, userInstaData);
+    const pic = await getFile(userData.result.profile.profile_img);
+
+    const checksum = getFileChecksum(pic);
+    if (checksum === userInstaData.checksum) {
+      console.log('Checksums match! skiping');
+      return new Response(JSON.stringify({ error: 'No new data fo Instagram profile' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      });
+    }
+
+
+    console.log('new data for', username);
+    const fileName = randomUUID() + '.png';
+
+    uploadProfilePicture(supabaseClient, new Uint8Array(pic), fileName);
+
+    const picHD = await getFile(userData.result.profile.profile_full_HD);
+    const fileNameHD = randomUUID() + '.png';
+    uploadProfilePicture(supabaseClient, new Uint8Array(picHD), fileNameHD);
+
+    // Example usage
+    const profilePictureData = {
+      profile_id: userInstaData.id,
+      path: fileName,
+      hd_path: fileNameHD,
+      checksum
+    };
+    console.log(profilePictureData);
+    console.log(await addProfilePicture(supabaseClient, profilePictureData));
+  } else {
+    // Handle the case where the Instagram profile ID is not found
+    return new Response(JSON.stringify({ error: 'Instagram profile ID not found' }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 400
+    });
+  }
+}
+
+async function getInstaProfioleData(supabaseClient, instagram_profile_id) {
+  // Query the database to get the user data based on the provided instagram_profile_id
+  const { data, error } = await supabaseClient
+    .from('last_profile_picture_checksum')
+    .select('id, name, checksum') // Add other fields as needed
+    .eq('id', instagram_profile_id);
+
+  if (error) {
+    throw error;
+  }
+
+  return data[0]; // Assuming you expect only one result, otherwise handle accordingly
+}
 
 async function getUserData(username: string) {
   const options = {
