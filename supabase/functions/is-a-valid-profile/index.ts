@@ -12,18 +12,18 @@ Deno.serve(async (req) => {
 
   const res = await fetch(`https://instagram.com/_u/${username}`);
 
-  const text  = await res.text();
+  const text = await res.text();
 
   const data = await isValidUsername(text)
 
 
-  console.log("date",data, username)
+  console.log("date", data, username)
 
-  console.log("debug", text.substring(0,20000))
+  console.log("debug", text.substring(0, 20000))
 
   return new Response(
-    JSON.stringify({debug: "ok"}),
-    { status:  data? 200 : 400, headers: { "Content-Type": "application/json" } },
+    null,
+    { status: data ? 200 : 400, headers: { "Content-Type": "application/json" } },
   )
 })
 
@@ -32,7 +32,7 @@ async function isValidUsername(res: string): Promise<boolean> {
 
 
   return res.includes('<link rel="alternate')
-  
+
 }
 /* To invoke locally:
 
