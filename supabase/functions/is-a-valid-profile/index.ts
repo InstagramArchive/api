@@ -22,8 +22,8 @@ Deno.serve(async (req) => {
   console.log("debug", text.substring(0, 20000))
 
   return new Response(
-    null,
-    { status: data ? 200 : 400, headers: { "Content-Type": "application/json" } },
+    JSON.stringify({valide: data}),
+    { status:  200, headers: { "Content-Type": "application/json" } },
   )
 })
 
